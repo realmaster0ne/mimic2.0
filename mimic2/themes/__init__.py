@@ -17,6 +17,27 @@ ALIASES = {"dark": "modern_dark", "light": "minimal_light"}
 COLOR_KEYS = ("background", "surface", "text", "muted", "border")
 FONT_KEYS = ("body", "heading", "mono")
 
+# Layout settings and their defaults (a theme without a layout section only
+# changes colours and fonts).
+LAYOUT_DEFAULTS = {
+    "max_width": "1200px",
+    "spacing": 1.0,
+    "heading_scale": 1.0,
+    "heading_weight": 700,
+    "header": "static",
+    "cards": "flat",
+    "card_min_width": "220px",
+    "image_radius": "0",
+    "buttons": "rounded",
+    "nav_style": "underline",
+}
+LAYOUT_CHOICES = {
+    "header": ("sticky", "static"),
+    "cards": ("elevated", "outlined", "flat"),
+    "buttons": ("pill", "rounded", "square"),
+    "nav_style": ("caps", "underline"),
+}
+
 
 class ThemeError(ValueError):
     pass
@@ -56,6 +77,15 @@ def validate(theme, source="theme"):
     for key in FONT_KEYS:
         if key not in theme["fonts"]:
             raise ThemeError(f"{source}: fonts.{key} is missing")
+    layout = theme.get("layout")
+    if layout is not None:
+        for key, allowed in LAYOUT_CHOICES.items():
+            if key in layout and layout[key] not in allowed:
+                raise ThemeError(f"{source}: layout.{key} must be one of "
+                                 f"{', '.join(allowed)}, not {layout[key]!r}")
+        for key in ("spacing", "heading_scale", "heading_weight"):
+            if key in layout and not isinstance(layout[key], (int, float)):
+                raise ThemeError(f"{source}: layout.{key} must be a number")
     return theme
 
 
@@ -67,4 +97,7 @@ def load(name):
     theme.setdefault("name", os.path.basename(path)[:-5].replace("_", "-"))
     theme.setdefault("radius", None)
     theme["fonts"].setdefault("import", None)
-    return validate(theme, os.path.basename(path))
+    validate(theme, os.path.basename(path))
+    if theme.get("layout") is not None:
+        theme["layout"] = {**LAYOUT_DEFAULTS, **theme["layout"]}
+    return theme

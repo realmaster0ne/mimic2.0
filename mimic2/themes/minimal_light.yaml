@@ -25,3 +25,16 @@ fonts:
   import: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=Source+Serif+4:wght@400;600&display=swap"
 
 radius: 4px             # corner rounding for buttons, cards and inputs
+
+# Layout personality: airy and editorial, lines instead of boxes.
+layout:
+  max_width: 1080px       # centre page content at this width
+  spacing: 1.6            # multiplies padding and gaps (1 = normal)
+  heading_scale: 1.2      # how much bigger headings get
+  heading_weight: 700
+  header: static          # sticky (stays on screen while scrolling) or static
+  cards: outlined         # elevated (shadow + lift on hover), outlined or flat
+  card_min_width: 240px   # item grids get as many columns as fit at this width
+  image_radius: 0
+  buttons: square         # pill, rounded or square
+  nav_style: underline    # caps (small uppercase links) or underline

@@ -54,3 +54,22 @@ def test_invalid_colour_rejected(tmp_path):
     )
     with pytest.raises(themes.ThemeError, match="background"):
         themes.load(str(f))
+
+
+def test_builtin_layouts_differ():
+    dark, light = themes.load("dark")["layout"], themes.load("light")["layout"]
+    for key in ("header", "cards", "buttons", "nav_style"):
+        assert dark[key] != light[key]
+
+
+def test_layout_defaults_and_validation(tmp_path):
+    base = ('background: "#000"\nsurface: "#111"\ntext: "#fff"\nmuted: "#aaa"\nborder: "#333"\n'
+            'palette: ["#ff0"]\nfonts: {body: a, heading: a, mono: a}\n')
+    ok = tmp_path / "ok.yaml"
+    ok.write_text(base + "layout: {cards: elevated}\n")
+    layout = themes.load(str(ok))["layout"]
+    assert layout["cards"] == "elevated" and layout["buttons"] == "rounded"  # default filled in
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(base + "layout: {buttons: blob}\n")
+    with pytest.raises(themes.ThemeError, match="layout.buttons"):
+        themes.load(str(bad))

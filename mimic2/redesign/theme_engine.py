@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 
 from mimic2 import themes
 from mimic2.clone.web_cloner import MANIFEST
+from mimic2.redesign.layout_rebuilder import layout_css
 from mimic2.utils import color_utils as cu
 from mimic2.utils import html_utils as hu
 
@@ -38,6 +39,9 @@ _FONT_FAMILY = re.compile(r"(font-family\s*:\s*)([^;}{]+)", re.I)
 _RADIUS = re.compile(r"(border-radius\s*:\s*)([0-9.]+)(px|rem|em)(?=\s*[;}!])", re.I)
 _HEAD_CLOSE = re.compile(r"</head\s*>", re.I)
 _MONO_HINT = re.compile(r"mono|courier|consolas|menlo|code", re.I)
+# Icon fonts draw symbols (stars, arrows); swapping them shows empty boxes.
+_ICON_FONT = re.compile(r"icon|awesome|glyph|material|symbol|fa-|feather|ionic|dashicons", re.I)
+_FONT_FACE = re.compile(r"@font-face\s*\{[^}]*\}", re.I)
 
 
 class ThemeEngine:
@@ -160,9 +164,21 @@ class ThemeEngine:
         fonts = self.theme["fonts"]
 
         def font(m):
+            if _ICON_FONT.search(m.group(2)):
+                return m.group(0)
             stack = fonts["mono"] if _MONO_HINT.search(m.group(2)) else fonts["body"]
             important = " !important" if "!important" in m.group(2) else ""
             return m.group(1) + stack + important
+
+        def fonts_outside_font_face(text):
+            # @font-face names a font file; renaming it would break the font.
+            out, last = [], 0
+            for m in _FONT_FACE.finditer(text):
+                out.append(_FONT_FAMILY.sub(font, text[last:m.start()]))
+                out.append(m.group(0))
+                last = m.end()
+            out.append(_FONT_FAMILY.sub(font, text[last:]))
+            return "".join(out)
 
         def radius(m):
             # Leave 0 (square) and large values (pills/circles) alone.
@@ -172,7 +188,7 @@ class ThemeEngine:
             return m.group(0)
 
         css = cu.recolor(css, self.color_map)
-        css = _FONT_FAMILY.sub(font, css)
+        css = fonts_outside_font_face(css)
         return _RADIUS.sub(radius, css)
 
     def _restyle_html(self, html, rel):
@@ -229,4 +245,4 @@ button, input[type="submit"], input[type="button"] {{
   color: {on_accent};
   border-color: var(--mimic2-accent);
 }}
-"""
+""" + layout_css(t)

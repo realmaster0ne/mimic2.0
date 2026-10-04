@@ -77,11 +77,26 @@ def test_color_map_accents_by_usage_and_shades():
 def test_color_map_accents_stay_readable():
     # A light green shade (like a price tag) on a near-white theme used to come
     # out bright mint; every accent must now reach 3:1 against the background.
-    colors = {"#428bca": 10, "#5cb85c": 3, "#dff0d8": 1, "#3c763d": 1}
+    colors = {"#428bca": 10, "#5cb85c": 3, "#3c763d": 1}
     for bg, palette in (("#fafaf9", ["#059669", "#0f766e"]), ("#0f172a", ["#8b5cf6", "#22d3ee"])):
         m = cu.build_color_map(colors, palette, background=bg, text="#777777")
         for new in m.values():
             assert cu.contrast_ratio(cu.parse_color(new), cu.parse_color(bg)) >= 3
+
+
+@pytest.mark.parametrize("bg, text, palette", [
+    ("#fafaf9", "#1c1917", ["#059669", "#0f766e"]),
+    ("#0f172a", "#e2e8f0", ["#8b5cf6", "#22d3ee"]),
+])
+def test_alert_boxes_stay_readable(bg, text, palette):
+    # Bootstrap's warning alert: pale yellow box, brown text. It used to become
+    # cyan text on a cyan box on the dark theme.
+    colors = {"#428bca": 10, "#fcf8e3": 1, "#8a6d3b": 1, "#ffffff": 5, "#333333": 5}
+    m = cu.build_color_map(colors, palette, background=bg, text=text)
+    box, words = cu.parse_color(m["#fcf8e3"]), cu.parse_color(m["#8a6d3b"])
+    assert cu.contrast_ratio(words, box) >= 3
+    # The box stays a subtle background close to the page, not a loud accent.
+    assert cu.contrast_ratio(box, cu.parse_color(bg)) < 1.6
 
 
 def test_ensure_contrast():

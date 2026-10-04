@@ -14,6 +14,8 @@ class is called. Keep each file short and working rather than complete.
 - [x] 6. `mimic2/__main__.py` so `python -m mimic2` works; remove the `analyze` and `metrics` commands from `cli.py` for now (CLI: `clone`, `redesign`, `themes`; `mimic2` console script in pyproject)
 - [x] 7. `tests/test_mimic2.py` — clone a local HTML fixture, redesign it, check colors changed (end-to-end through the CLI: offline links, originals kept, readability, errors)
 
+- [x] 8. `mimic2/redesign/layout_rebuilder.py` + `layout:` in each theme — real layout changes (header, nav, card grid, cards, buttons, sidebar, footer, spacing, headings, motion), not just colours
+
 ## Later (not now)
 
 - analyze, metrics, mobile cloning, dashboard

@@ -123,3 +123,52 @@ def test_manifest_records_redesign(project):
 def test_empty_folder(tmp_path):
     with pytest.raises(FileNotFoundError, match="clone"):
         redesign(tmp_path)
+
+
+def test_icon_fonts_and_font_face_untouched(project):
+    css_path = project / "css" / "site.css"
+    css_path.write_text(
+        "@font-face { font-family: 'Glyphicons Halflings'; src: url(g.woff); }\n"
+        ".icon-star { font-family: FontAwesome; }\n"
+        ".glyphicon { font-family: 'Glyphicons Halflings'; }\n"
+        "p { font-family: Arial; }\n"
+    )
+    redesign(project, "dark")
+    css = css_path.read_text()
+    assert "@font-face { font-family: 'Glyphicons Halflings';" in css
+    assert ".icon-star { font-family: FontAwesome; }" in css
+    assert ".glyphicon { font-family: 'Glyphicons Halflings'; }" in css
+    assert "p { font-family: Arial; }" not in css
+
+
+def test_layout_styles_in_theme_css(project):
+    redesign(project, "dark")
+    css = (project / THEME_CSS).read_text()
+    assert "layout: modern-dark" in css
+    assert "display: grid !important" in css           # item lists become a grid
+    assert "position: sticky !important" in css         # sticky header
+    assert "border-radius: 999px !important" in css     # pill buttons
+    assert "prefers-reduced-motion" in css
+    redesign(project, "light")
+    css = (project / THEME_CSS).read_text()
+    assert "layout: minimal-light" in css
+    assert "position: sticky" not in css
+    assert "border-radius: 0 !important" in css         # square buttons
+
+
+def test_cards_keep_site_height(project):
+    # Sites pin prices to the bottom of fixed-height cards; collapsing the
+    # card's height made prices overlap the images.
+    redesign(project, "dark")
+    css = (project / THEME_CSS).read_text()
+    assert "height: auto !important" not in css
+
+
+def test_theme_without_layout_has_no_layout_css(project, tmp_path):
+    f = tmp_path / "plain.yaml"
+    f.write_text(
+        'background: "#000"\nsurface: "#111"\ntext: "#fff"\nmuted: "#aaa"\nborder: "#333"\n'
+        'palette: ["#ff0"]\nfonts: {body: Arial, heading: Arial, mono: monospace}\n'
+    )
+    redesign(project, str(f))
+    assert "layout:" not in (project / THEME_CSS).read_text()

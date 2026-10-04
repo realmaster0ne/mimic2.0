@@ -41,6 +41,8 @@ NEUTRAL_SATURATION = 0.12  # below this a colour counts as grey
 HUE_GROUP_DEGREES = 30     # colours within this hue distance share a palette colour
 MAX_SHADE_SHIFT = 0.25     # how far a shade's lightness may move from its new main colour
 MIN_ACCENT_CONTRAST = 3.0  # WCAG minimum for accents (links, buttons) on the background
+TINT_LIGHTNESS = (0.15, 0.85)  # colours outside this lightness range are tints
+TINT_ACCENT_MIX = 0.15     # how much accent a tint gets
 
 
 def _clamp(x, lo=0.0, hi=1.0):
@@ -179,9 +181,14 @@ def build_color_map(colors, palette, background, text):
     parsed = {t: parse_color(t) for t in colors}
 
     # Group the chromatic colours by hue, weighting each group by usage.
+    # Very pale/dark tints (alert boxes, highlights) are handled separately.
     groups = []  # [hue, total count, [css texts]]
+    tints = []
     for t, c in parsed.items():
         if c is None or is_neutral(c):
+            continue
+        if not TINT_LIGHTNESS[0] < to_hsl(c)[2] < TINT_LIGHTNESS[1]:
+            tints.append(t)
             continue
         hue = to_hsl(c)[0]
         for g in groups:
@@ -211,6 +218,20 @@ def build_color_map(colors, palette, background, text):
             offset = max(-MAX_SHADE_SHIFT, min(MAX_SHADE_SHIFT, l - base_l))
             new = from_hsl(ah, _clamp(new_s), al + offset, c[3])
             mapping[t] = to_css(ensure_contrast(new, bg, MIN_ACCENT_CONTRAST))
+
+    # A tint stays a subtle background: the grey it would be on the new ramp,
+    # with a little of the nearest accent mixed in. Text drawn on it keeps
+    # roughly the contrast it has against the page background.
+    for t in tints:
+        c = parsed[t]
+        hue = to_hsl(c)[0]
+        accent = accents[0]
+        for i, (group_hue, _, _) in enumerate(groups):
+            if _hue_distance(group_hue, hue) <= HUE_GROUP_DEGREES:
+                accent = accents[i % len(accents)]
+                break
+        neutral = mix(fg, bg, to_hsl(c)[2])
+        mapping[t] = to_css(mix(neutral, accent, TINT_ACCENT_MIX)[:3] + (c[3],))
     return mapping
 
 
