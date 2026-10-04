@@ -19,19 +19,20 @@ PAGE_EXTS = {"", ".html", ".htm", ".php", ".asp", ".aspx", ".jsp"}
 # url(...) and @import "..." inside CSS.
 _CSS_URL = re.compile(r"""url\(\s*(['"]?)([^'")]+)\1\s*\)""", re.I)
 _CSS_IMPORT = re.compile(r"""@import\s+(['"])([^'"]+)\1""", re.I)
-# href="..." / src="..." attributes in HTML (quoted values only).
-_ATTR = re.compile(r"""(\b(?:href|src)\s*=\s*)(['"])(.*?)\2""", re.I | re.S)
+# href/src attributes in HTML: quoted (href="...") or bare (href=/x, common
+# in minified pages).
+_ATTR = re.compile(r"""(\b(?:href|src)\s*=\s*)(?:(['"])(.*?)\2|([^\s>'"`=]+))""", re.I | re.S)
 # <style>...</style> blocks and style="..." attributes, for CSS url()s.
 _STYLE_BLOCK = re.compile(r"(<style\b[^>]*>)(.*?)(</style>)", re.I | re.S)
 _STYLE_ATTR = re.compile(r"""(\bstyle\s*=\s*)(['"])(.*?)\2""", re.I | re.S)
 
 
 def fetch(url, timeout=15):
-    """GET a URL and return (body bytes, content type without parameters)."""
+    """GET a URL and return (body bytes, content type, final URL after redirects)."""
     req = Request(url, headers={"User-Agent": USER_AGENT})
     with urlopen(req, timeout=timeout) as resp:
         ctype = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
-        return resp.read(), ctype
+        return resp.read(), ctype, resp.geturl()
 
 
 def decode(body, default="utf-8"):
@@ -181,8 +182,10 @@ def rewrite_html(html, base_url, mapper):
     """
 
     def attr_sub(m):
-        new = mapper(_absolute(m.group(3), base_url))
-        return f"{m.group(1)}{m.group(2)}{new}{m.group(2)}" if new else m.group(0)
+        quote = m.group(2) or '"'
+        ref = m.group(3) if m.group(2) else m.group(4)
+        new = mapper(_absolute(ref, base_url))
+        return f"{m.group(1)}{quote}{new}{quote}" if new else m.group(0)
 
     def style_block(m):
         return m.group(1) + _rewrite_css_text(m.group(2), base_url, mapper) + m.group(3)

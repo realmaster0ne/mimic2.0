@@ -74,6 +74,15 @@ def test_rewrite_html_maps_known_urls_only():
     assert 'href="#top"' in out
 
 
+def test_rewrite_html_unquoted_attributes():
+    html = "<link rel=icon href=data:,><script src=/s.js></script><a href=about>A</a>"
+    mapping = {"https://example.com/s.js": "s.js"}
+    out = hu.rewrite_html(html, "https://example.com/", mapping.get)
+    assert '<script src="s.js">' in out
+    assert "href=data:," in out  # data: URL left alone
+    assert "href=about>" in out  # unmapped left alone
+
+
 def test_same_site_and_is_page():
     assert hu.same_site("https://Example.com/a", "https://example.com/")
     assert not hu.same_site("https://cdn.example.com/a", "https://example.com/")
