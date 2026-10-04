@@ -18,21 +18,22 @@ A powerful platform for cloning, analyzing, and redesigning applications with mo
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install (from the repo folder)
+pip install -e .
 
-# Clone an app
-python -m mimic2 clone https://example.com --output ./redesigned-app
+# Clone an app (pages + CSS/JS/images/fonts), then redesign it in one go
+python -m mimic2 clone https://example.com --output ./my-app --theme dark
 
-# Analyze the cloned app
-python -m mimic2 analyze ./cloned-app --output analysis.json
+# Or redesign an existing clone; re-running starts from the original files
+python -m mimic2 redesign ./my-app --theme light
+python -m mimic2 redesign ./my-app --theme dark --palette "#FF5733,#33FF57"
 
-# Redesign with a custom theme
-python -m mimic2 redesign ./cloned-app --theme modern-dark --output ./redesigned-app
-
-# Generate analytics
-python -m mimic2 analytics ./cloned-app --output dashboard.html
+# List built-in themes
+python -m mimic2 themes
 ```
+
+> Analysis, metrics, mobile cloning and the dashboard below are planned (see
+> PROGRESS.md); `clone`, `redesign` and `themes` work today.
 
 ## Architecture
 

@@ -13,6 +13,7 @@ capture = ["mitmproxy>=10"]
 
 [project.scripts]
 mimic = "mimic.cli:main"
+mimic2 = "mimic2.cli:main"
 
 [build-system]
 requires = ["setuptools>=64"]

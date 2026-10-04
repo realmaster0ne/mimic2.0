@@ -11,7 +11,7 @@ class is called. Keep each file short and working rather than complete.
 - [x] 3. `mimic2/utils/color_utils.py` — hex/RGB conversion, lighten/darken, map old colors to a new palette (`find_colors` → `build_color_map` → `recolor`; tests: `tests/test_mimic2_color_utils.py`)
 - [x] 4. `mimic2/themes/modern_dark.yaml` + `mimic2/themes/minimal_light.yaml` — colors and fonts for each theme (loader: `mimic2.themes.load()`; tests: `tests/test_mimic2_themes.py`)
 - [x] 5. `mimic2/redesign/__init__.py` + `mimic2/redesign/theme_engine.py` — `ThemeEngine(project_dir, theme, palette)` with `.apply()`: swaps colors/fonts in the cloned CSS/HTML; originals kept in `.mimic2-original/` (tests: `tests/test_mimic2_theme_engine.py`)
-- [ ] 6. `mimic2/__main__.py` so `python -m mimic2` works; remove the `analyze` and `metrics` commands from `cli.py` for now
+- [x] 6. `mimic2/__main__.py` so `python -m mimic2` works; remove the `analyze` and `metrics` commands from `cli.py` for now (CLI: `clone`, `redesign`, `themes`; `mimic2` console script in pyproject)
 - [ ] 7. `tests/test_mimic2.py` — clone a local HTML fixture, redesign it, check colors changed
 
 ## Later (not now)
