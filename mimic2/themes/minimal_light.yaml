@@ -1,0 +1,27 @@
+# Clean, minimal light theme with a single green accent.
+name: minimal-light
+description: Clean, minimal light theme
+mode: light
+
+background: "#fafaf9"   # page background
+surface: "#ffffff"      # cards, panels, inputs
+text: "#1c1917"         # body text
+muted: "#78716c"        # secondary text
+border: "#e7e5e4"
+
+# Accent colours, most important first. The original site's most used
+# brand colour becomes the first one, the next becomes the second, and so on.
+palette:
+  - "#059669"
+  - "#0f766e"
+  - "#d97706"
+
+fonts:
+  body: "'Source Serif 4', Georgia, 'Times New Roman', serif"
+  heading: "'DM Sans', 'Segoe UI', system-ui, -apple-system, sans-serif"
+  mono: "'IBM Plex Mono', Consolas, monospace"
+  # Optional web font stylesheet; the stacks above fall back to system fonts
+  # when offline.
+  import: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=Source+Serif+4:wght@400;600&display=swap"
+
+radius: 4px             # corner rounding for buttons, cards and inputs
