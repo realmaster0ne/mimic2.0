@@ -1,126 +1,110 @@
-# mimic
+# 🎨 Mimic 2.0 — App Clone & Redesign Platform
 
-Intercept any app, then call it from Python like a library.
+A powerful platform for cloning, analyzing, and redesigning applications with modern UI/UX patterns.
 
-```python
-from hinge_client import Hinge
+## Features
 
-acc = Hinge()                 # reuses your captured session
-recs = acc.get_recommendations()
-acc.like(subject_id, comment="hi lol")
-```
+- **📦 App Cloning** — Clone any web/mobile app structure
+- **🔍 Deep Analysis** — Analyze app architecture, design patterns, and UX flows
+- **🎨 Redesign Engine** — Generate redesigned versions with improved aesthetics
+- **🧩 Component Extraction** — Extract and catalog reusable components
+- **📊 Analytics Dashboard** — Visualize design metrics and improvements
+- **🔄 Theme System** — Apply custom themes across the entire app
+- **📱 Responsive Design** — Ensure cross-device compatibility
+- **♿ Accessibility** — WCAG 2.1 AA compliance built-in
+- **⚡ Performance Optimization** — Auto-optimize assets and code
+- **🧪 Testing Suite** — Automated visual regression testing
 
-You don't write `hinge_client.py`. mimic captures your own app traffic and an AI
-generates the client from it.
-
-## How it works
-
-Most apps authenticate every request with the same bundle of values: a bearer
-token, some device ids, a session id, cookies. They're stable across calls.
-Capture them once from a real request you made, and you can replay them on new
-requests to the same API.
-
-```
-capture traffic   ->   extract auth   ->   generate client
-  (mitmproxy)         (mimic.Session)      (claude reads the
-                                            captured endpoints)
-```
-
-The generated client is plain Python on top of `mimic.App`, and you edit it like
-any other file. It gives you named methods, body templates, and the multi-step
-call chaining mobile APIs tend to need (fetch a token in one call, spend it in
-the next).
-
-## Install
+## Quick Start
 
 ```bash
-sh install.sh
+# Install dependencies
+pip install -r requirements.txt
+
+# Clone an app
+python -m mimic2 clone https://example.com --output ./redesigned-app
+
+# Analyze the cloned app
+python -m mimic2 analyze ./cloned-app --output analysis.json
+
+# Redesign with a custom theme
+python -m mimic2 redesign ./cloned-app --theme modern-dark --output ./redesigned-app
+
+# Generate analytics
+python -m mimic2 analytics ./cloned-app --output dashboard.html
 ```
 
-Installs [`uv`](https://astral.sh/uv) if you don't have it, then mimic in an
-isolated tool env. mitmproxy isn't a separate install; mimic launches it via
-`uvx` on first `record`. (Manual: `uv tool install mimic-client`.)
+## Architecture
 
-```bash
-mimic doctor                    # confirm proxy + claude are ready
+```
+mimic2.0/
+├── mimic2/                    # Main package
+│   ├── __init__.py
+│   ├── cli.py                 # CLI entry point
+│   ├── clone/                 # App cloning engine
+│   │   ├── __init__.py
+│   │   ├── web_cloner.py      # Web app cloner
+│   │   ├── mobile_cloner.py   # Mobile app cloner
+│   │   └── asset_extractor.py # Asset extraction
+│   ├── analyze/               # Analysis engine
+│   │   ├── __init__.py
+│   │   ├── architecture.py    # Architecture analysis
+│   │   ├── design_patterns.py # Design pattern detection
+│   │   ├── ux_audit.py        # UX audit
+│   │   └── accessibility.py   # Accessibility audit
+│   ├── redesign/              # Redesign engine
+│   │   ├── __init__.py
+│   │   ├── theme_engine.py    # Theme generation
+│   │   ├── layout_rebuilder.py # Layout reconstruction
+│   │   ├── component_generator.py # Component generation
+│   │   └── style_transformer.py # Style transformation
+│   ├── analytics/             # Analytics engine
+│   │   ├── __init__.py
+│   │   ├── metrics.py         # Design metrics
+│   │   └── dashboard.py       # Dashboard generation
+│   ├── themes/                # Built-in themes
+│   │   ├── modern_dark.yaml
+│   │   ├── minimal_light.yaml
+│   │   ├── vibrant_gradient.yaml
+│   │   └── professional_blue.yaml
+│   ├── templates/             # Redesign templates
+│   │   ├── web/
+│   │   └── mobile/
+│   └── utils/                 # Utilities
+│       ├── __init__.py
+│       ├── file_utils.py
+│       ├── color_utils.py
+│       └── html_utils.py
+├── tests/                     # Test suite
+├── docs/                      # Documentation
+├── examples/                  # Example projects
+├── pyproject.toml
+├── requirements.txt
+└── setup.py
 ```
 
-## Use it (iPhone)
+## Built-in Themes
 
-```bash
-mimic record                    # starts the proxy, prints the iPhone steps
-```
+| Theme | Description | Best For |
+|-------|-------------|----------|
+| `modern-dark` | Sleek dark mode with accent colors | Developer tools, dashboards |
+| `minimal-light` | Clean, minimal light theme | Content apps, blogs |
+| `vibrant-gradient` | Bold gradients and modern aesthetics | Creative apps, portfolios |
+| `professional-blue` | Corporate blue palette | Business apps, SaaS |
+| `neon-cyberpunk` | Neon accents on dark background | Gaming, entertainment |
+| `nature-organic` | Earth tones with organic shapes | Health, wellness, eco |
 
-`record` fills in your Mac's LAN IP and walks you through it:
+## Redesign Capabilities
 
-1. iPhone -> Wi-Fi -> Configure Proxy -> Manual -> `<your-mac-ip>:8080`
-2. Safari -> `http://mitm.it` -> install the Apple profile
-3. Settings -> General -> About -> Certificate Trust Settings -> turn on full
-   trust for mitmproxy. This step is easy to miss and nothing works without it.
-4. open the app, use it normally
-
-Then:
-
-```bash
-mimic hosts                     # list captured hosts; pick your API host
-mimic learn  prod-api.hingeaws.net    # see the endpoints mimic saw
-mimic gen    prod-api.hingeaws.net    # generate hinge_client.py
-```
-
-Then `from hinge_client import Hinge; Hinge().get_recommendations()`.
-
-## The library
-
-Three ways to build a session by hand, if you don't want codegen:
-
-```python
-from mimic import Session
-
-Session.from_mitm("prod-api.hingeaws.net")        # pull auth from mitmweb
-Session.from_curl(open("copied.txt").read())      # paste "Copy as cURL" from devtools
-Session(base_url="https://x.com", headers={...})  # explicit
-```
-
-`.get(path)`, `.post(path, json=...)`, and the other common HTTP verb helpers
-return parsed JSON and raise `requests.HTTPError` for failed responses. If your
-token rotates, a `401` on an idempotent request triggers one re-pull from
-mitmweb and a retry. Non-idempotent requests are not retried unless you explicitly
-pass `refresh=True`.
-
-## Capture backends
-
-- **mitmproxy** for iOS apps (the default). mimic reads its JSON flow API and
-  runs it via `uvx`, so there's nothing extra to install.
-- **cURL / paste** for anything with a web version. `Copy as cURL` in devtools,
-  then `Session.from_curl(text)`. No proxy, no cert.
-- **HAR file** for web apps and anything you can capture in a browser. In Chrome
-  or Firefox devtools, open the Network tab, right-click a request, and choose
-  "Save all as HAR". Then `mimic hosts --har traffic.har` and
-  `mimic gen api.example.com --har traffic.har`, or build a session directly with
-  `Session.from_har("traffic.har", "api.example.com")`. No proxy, no cert.
-
-## Limitations
-
-Two auth schemes get in the way, for different reasons:
-
-- **Certificate pinning** (banking, Instagram). The app rejects the mitmproxy
-  cert, so the proxy sees no traffic and nothing shows up in `mimic hosts`. This
-  blocks *capture*, not replay — get past the pin and the rest works normally.
-  `mimic unpin <ipa|bundle-id>` sets up a Frida-based bypass; see
-  [docs/pinning.md](docs/pinning.md).
-- **DPoP / sender-constrained tokens.** Each request carries a fresh proof
-  signed by a private key that never leaves the device, so captured requests
-  don't replay. This defeats the core model, not just capture; there's no clean
-  workaround. See [docs/dpop.md](docs/dpop.md).
-
-If `mimic hosts` shows the app's API host, you're good.
-
-## Ethics
-
-Use it on your own accounts and data. It replays your session; it is not a tool
-for accessing anyone else's. Respect each app's terms of service.
+1. **Color Palette Transformation** — Generate harmonious palettes from any source
+2. **Typography System** — Modern font pairings and hierarchy
+3. **Layout Restructuring** — Improved information architecture
+4. **Component Library** — Reusable, consistent UI components
+5. **Animation & Micro-interactions** — Smooth transitions and feedback
+6. **Responsive Breakpoints** — Mobile-first responsive design
+7. **Accessibility Compliance** — WCAG 2.1 AA standards
+8. **Performance Optimization** — Asset compression, lazy loading
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Provided as-is, no warranty. Use on your own
-accounts and data; you are responsible for complying with each app's terms.
+MIT
