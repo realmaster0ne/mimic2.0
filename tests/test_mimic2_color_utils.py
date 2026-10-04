@@ -63,11 +63,32 @@ def test_color_map_dark_theme_inverts_neutrals():
 def test_color_map_accents_by_usage_and_shades():
     colors = {"#0066cc": 10, "#004c99": 2, "#e53935": 4}
     m = cu.build_color_map(colors, ["#10b981", "#f59e0b"], background="#fff", text="#000")
-    assert m["#0066cc"] == "#10b981"  # most used hue gets the first palette colour
-    assert m["#e53935"] == "#f59e0b"
+    hue = lambda c: cu.to_hsl(cu.parse_color(c))[0]
+    # Most used hue gets the first palette colour, the next hue the second.
+    # Both are darkened just enough to be readable on white, keeping their hue.
+    assert abs(hue(m["#0066cc"]) - hue("#10b981")) < 2
+    assert abs(hue(m["#e53935"]) - hue("#f59e0b")) < 2
+    assert cu.contrast_ratio(cu.parse_color(m["#e53935"]), cu.parse_color("#fff")) >= 3
     # The darker hover shade stays darker than its new main colour.
     assert cu.to_hsl(cu.parse_color(m["#004c99"]))[2] < cu.to_hsl(cu.parse_color(m["#0066cc"]))[2]
     assert abs(cu.to_hsl(cu.parse_color(m["#004c99"]))[0] - cu.to_hsl(cu.parse_color("#10b981"))[0]) < 2
+
+
+def test_color_map_accents_stay_readable():
+    # A light green shade (like a price tag) on a near-white theme used to come
+    # out bright mint; every accent must now reach 3:1 against the background.
+    colors = {"#428bca": 10, "#5cb85c": 3, "#dff0d8": 1, "#3c763d": 1}
+    for bg, palette in (("#fafaf9", ["#059669", "#0f766e"]), ("#0f172a", ["#8b5cf6", "#22d3ee"])):
+        m = cu.build_color_map(colors, palette, background=bg, text="#777777")
+        for new in m.values():
+            assert cu.contrast_ratio(cu.parse_color(new), cu.parse_color(bg)) >= 3
+
+
+def test_ensure_contrast():
+    white = cu.parse_color("#ffffff")
+    fixed = cu.ensure_contrast(cu.parse_color("#a7f3d0"), white)
+    assert cu.contrast_ratio(fixed, white) >= 3
+    assert cu.ensure_contrast(cu.parse_color("#000000"), white) == cu.parse_color("#000000")
 
 
 def test_color_map_keeps_alpha():

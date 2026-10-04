@@ -39,6 +39,8 @@ COLOR_RE = re.compile(
 
 NEUTRAL_SATURATION = 0.12  # below this a colour counts as grey
 HUE_GROUP_DEGREES = 30     # colours within this hue distance share a palette colour
+MAX_SHADE_SHIFT = 0.25     # how far a shade's lightness may move from its new main colour
+MIN_ACCENT_CONTRAST = 3.0  # WCAG minimum for accents (links, buttons) on the background
 
 
 def _clamp(x, lo=0.0, hi=1.0):
@@ -135,6 +137,16 @@ def contrast_ratio(c1, c2):
     return (hi + 0.05) / (lo + 0.05)
 
 
+def ensure_contrast(color, background, minimum=3.0):
+    """Darken (on light backgrounds) or lighten (on dark) until readable."""
+    step = -0.02 if luminance(background) > 0.5 else 0.02
+    for _ in range(50):
+        if contrast_ratio(color, background) >= minimum:
+            break
+        color = lighten(color, step)
+    return color
+
+
 def is_neutral(color):
     return to_hsl(color)[1] < NEUTRAL_SATURATION
 
@@ -196,7 +208,9 @@ def build_color_map(colors, palette, background, text):
             c = parsed[t]
             _, s, l = to_hsl(c)
             new_s = as_ * (s / max(to_hsl(parsed[members[0]])[1], 1e-6)) if as_ else 0
-            mapping[t] = to_css(from_hsl(ah, _clamp(new_s), al + (l - base_l), c[3]))
+            offset = max(-MAX_SHADE_SHIFT, min(MAX_SHADE_SHIFT, l - base_l))
+            new = from_hsl(ah, _clamp(new_s), al + offset, c[3])
+            mapping[t] = to_css(ensure_contrast(new, bg, MIN_ACCENT_CONTRAST))
     return mapping
 
 

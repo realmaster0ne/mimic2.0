@@ -151,9 +151,8 @@ def local_path(url, page=None):
         root, ext = path, ".html"
     if parsed.query:
         root += "_" + hashlib.sha1(parsed.query.encode()).hexdigest()[:8]
-    # Keep paths safe on Windows.
-    root = re.sub(r'[<>:"|?*]', "_", root)
-    return root + ext
+    # Keep paths safe on Windows (the path may hold a decoded %3F, etc.).
+    return re.sub(r'[<>:"|?*\\]', "_", root + ext)
 
 
 def relative_link(from_file, to_file):
@@ -187,16 +186,28 @@ def rewrite_html(html, base_url, mapper):
         new = mapper(_absolute(ref, base_url))
         return f"{m.group(1)}{quote}{new}{quote}" if new else m.group(0)
 
+    html = _ATTR.sub(attr_sub, html)
+    return rewrite_inline_css(html, lambda css: _rewrite_css_text(css, base_url, mapper))
+
+
+def rewrite_inline_css(html, transform):
+    """Apply transform(css) -> css to <style> blocks and style="..." attributes."""
+
     def style_block(m):
-        return m.group(1) + _rewrite_css_text(m.group(2), base_url, mapper) + m.group(3)
+        return m.group(1) + transform(m.group(2)) + m.group(3)
 
     def style_attr(m):
-        css = _rewrite_css_text(m.group(3), base_url, mapper)
-        return f"{m.group(1)}{m.group(2)}{css}{m.group(2)}"
+        return f"{m.group(1)}{m.group(2)}{transform(m.group(3))}{m.group(2)}"
 
-    html = _ATTR.sub(attr_sub, html)
     html = _STYLE_BLOCK.sub(style_block, html)
     return _STYLE_ATTR.sub(style_attr, html)
+
+
+def inline_css(html):
+    """All CSS text inside a page's <style> blocks and style attributes."""
+    parts = [m.group(2) for m in _STYLE_BLOCK.finditer(html)]
+    parts += [m.group(3) for m in _STYLE_ATTR.finditer(html)]
+    return "\n".join(parts)
 
 
 def rewrite_css(css, base_url, mapper):

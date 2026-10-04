@@ -52,6 +52,8 @@ def test_local_path():
     assert hu.local_path("https://example.com/css/site.css") == "css/site.css"
     versioned = hu.local_path("https://example.com/css/site.css?v=2")
     assert versioned.startswith("css/site_") and versioned.endswith(".css")
+    # Encoded characters Windows can't use in file names are replaced.
+    assert hu.local_path("https://example.com/f/font.eot%3Fv=3", page=False) == "f/font.eot_v=3"
 
 
 def test_relative_link():
