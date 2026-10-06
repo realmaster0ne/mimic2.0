@@ -92,12 +92,20 @@ def validate(theme, source="theme"):
 def load(name):
     """Load and validate a theme by name, CLI alias or YAML file path."""
     path = _path_for(name)
-    with open(path, encoding="utf-8") as f:
-        theme = yaml.safe_load(f) or {}
+    source = os.path.basename(path)
+    try:
+        with open(path, encoding="utf-8") as f:
+            theme = yaml.safe_load(f) or {}
+    except yaml.YAMLError as e:
+        raise ThemeError(f"{source}: not valid YAML ({e})") from e
+    if not isinstance(theme, dict):
+        raise ThemeError(f"{source}: a theme file must be a list of key: value settings")
     theme.setdefault("name", os.path.basename(path)[:-5].replace("_", "-"))
     theme.setdefault("radius", None)
+    if "fonts" in theme and not isinstance(theme["fonts"], dict):
+        raise ThemeError(f"{source}: fonts must be a list of key: value settings")
+    validate(theme, source)
     theme["fonts"].setdefault("import", None)
-    validate(theme, os.path.basename(path))
     if theme.get("layout") is not None:
         theme["layout"] = {**LAYOUT_DEFAULTS, **theme["layout"]}
     return theme

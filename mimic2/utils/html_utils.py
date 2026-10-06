@@ -8,11 +8,23 @@ scripts) is kept byte-for-byte.
 import hashlib
 import posixpath
 import re
+import time
 from html.parser import HTMLParser
 from urllib.parse import unquote, urldefrag, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 USER_AGENT = "Mozilla/5.0 (compatible; mimic2/2.0)"
+# The product token robots.txt rules are matched against.
+ROBOTS_AGENT = "mimic2"
+
+MAX_BYTES = 20 * 1024 * 1024   # biggest single file we'll download
+MAX_SECONDS = 60               # longest we'll spend downloading one file
+_CHUNK = 64 * 1024
+
+# Windows can't create files with these names, whatever the extension.
+_RESERVED = {"con", "prn", "aux", "nul",
+             *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
+_MAX_NAME = 120  # keep each path part well under Windows' 255/260 limits
 
 PAGE_EXTS = {"", ".html", ".htm", ".php", ".asp", ".aspx", ".jsp"}
 
@@ -27,22 +39,61 @@ _STYLE_BLOCK = re.compile(r"(<style\b[^>]*>)(.*?)(</style>)", re.I | re.S)
 _STYLE_ATTR = re.compile(r"""(\bstyle\s*=\s*)(['"])(.*?)\2""", re.I | re.S)
 
 
-def fetch(url, timeout=15):
-    """GET a URL and return (body bytes, content type, final URL after redirects)."""
+def fetch(url, timeout=15, max_bytes=MAX_BYTES, max_seconds=MAX_SECONDS):
+    """GET a URL and return (body bytes, content type, final URL after redirects).
+
+    Raises ValueError if the body is bigger than max_bytes or takes longer
+    than max_seconds to arrive, so one huge or stalling file can't hang the
+    clone or fill the disk. The content type keeps any "; charset=" part.
+    """
     req = Request(url, headers={"User-Agent": USER_AGENT})
+    deadline = time.monotonic() + max_seconds
     with urlopen(req, timeout=timeout) as resp:
-        ctype = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
-        return resp.read(), ctype, resp.geturl()
+        length = resp.headers.get("Content-Length")
+        if length and length.isdigit() and int(length) > max_bytes:
+            raise ValueError(f"too large ({int(length)} bytes)")
+        chunks, size = [], 0
+        while True:
+            chunk = resp.read(_CHUNK)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > max_bytes:
+                raise ValueError(f"too large (over {max_bytes} bytes)")
+            if time.monotonic() > deadline:
+                raise ValueError(f"took longer than {max_seconds}s")
+            chunks.append(chunk)
+        ctype = resp.headers.get("Content-Type", "").strip().lower()
+        return b"".join(chunks), ctype, resp.geturl()
 
 
-def decode(body, default="utf-8"):
-    """Decode page bytes, honouring a <meta charset> if there is one."""
+def mime_type(ctype):
+    """'text/html; charset=utf-8' -> 'text/html'."""
+    return ctype.split(";")[0].strip()
+
+
+def charset_of(ctype):
+    """'text/html; charset=utf-8' -> 'utf-8', or None."""
+    m = re.search(r"charset=['\"]?([\w-]+)", ctype or "", re.I)
+    return m.group(1) if m else None
+
+
+def decode(body, default="utf-8", charset=None):
+    """Decode page bytes: the HTTP charset if given, else <meta charset>."""
     m = re.search(rb"""<meta[^>]+charset=['"]?([\w-]+)""", body[:2048], re.I)
-    encoding = m.group(1).decode("ascii") if m else default
+    encoding = charset or (m.group(1).decode("ascii") if m else default)
     try:
         return body.decode(encoding, errors="replace")
     except LookupError:
         return body.decode(default, errors="replace")
+
+
+_META_CHARSET = re.compile(r"""(<meta\b[^>]*?\bcharset\s*=\s*['"]?)([\w-]+)""", re.I)
+
+
+def declare_utf8(html):
+    """Point every <meta> charset declaration at utf-8 (we save pages as UTF-8)."""
+    return _META_CHARSET.sub(lambda m: m.group(1) + "utf-8", html)
 
 
 def _absolute(ref, base_url):
@@ -152,7 +203,21 @@ def local_path(url, page=None):
     if parsed.query:
         root += "_" + hashlib.sha1(parsed.query.encode()).hexdigest()[:8]
     # Keep paths safe on Windows (the path may hold a decoded %3F, etc.).
-    return re.sub(r'[<>:"|?*\\]', "_", root + ext)
+    path = re.sub(r'[<>:"|?*\\\x00-\x1f]', "_", root + ext)
+    return "/".join(_safe_part(p) for p in path.split("/"))
+
+
+def _safe_part(name):
+    """Make one path part a legal, not-too-long Windows file name."""
+    name = name.rstrip(". ") or "_"
+    stem, ext = posixpath.splitext(name)
+    if stem.split(".")[0].lower() in _RESERVED:
+        name = stem + "_" + ext
+    if len(name) > _MAX_NAME:
+        digest = hashlib.sha1(name.encode()).hexdigest()[:8]
+        ext = ext if len(ext) <= 10 else ""
+        name = name[:_MAX_NAME - len(ext) - 9] + "_" + digest + ext
+    return name
 
 
 def relative_link(from_file, to_file):

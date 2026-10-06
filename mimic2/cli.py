@@ -7,15 +7,28 @@ Usage:
 """
 
 import argparse
+import re
 import sys
+
+import yaml
 
 from mimic2 import themes
 from mimic2.clone.web_cloner import WebAppCloner
 from mimic2.redesign.theme_engine import ThemeEngine
 
+# Commas between colours, but not the ones inside rgb(...) or hsl(...).
+_PALETTE_SPLIT = re.compile(r",(?![^()]*\))")
+
+
+def split_palette(text):
+    """'#f00, rgb(0,128,0)' -> ['#f00', 'rgb(0,128,0)']."""
+    return [p.strip() for p in _PALETTE_SPLIT.split(text) if p.strip()]
+
 
 def cmd_clone(args):
     """Clone a web application, optionally redesigning it straight away."""
+    # Load the theme first so a typo fails now, not after the whole download.
+    engine = ThemeEngine(project_dir=args.output, theme=args.theme) if args.theme else None
     cloner = WebAppCloner(
         url=args.url,
         output_dir=args.output,
@@ -26,8 +39,8 @@ def cmd_clone(args):
     )
     cloner.run()
     print(f"[+] App cloned to {args.output}")
-    if args.theme:
-        ThemeEngine(project_dir=args.output, theme=args.theme).apply()
+    if engine:
+        engine.apply()
         print(f"[+] Redesigned with {args.theme}")
 
 
@@ -36,7 +49,7 @@ def cmd_redesign(args):
     engine = ThemeEngine(
         project_dir=args.project,
         theme=args.theme,
-        palette=args.palette.split(",") if args.palette else None,
+        palette=split_palette(args.palette) if args.palette else None,
     )
     engine.apply()
     print("[+] Redesign applied successfully.")
@@ -94,7 +107,11 @@ def main(argv=None):
     }
     try:
         commands[args.command](args)
-    except (themes.ThemeError, FileNotFoundError, RuntimeError) as e:
+    except KeyboardInterrupt:
+        print("\n[!] Cancelled.", file=sys.stderr)
+        sys.exit(130)
+    except (OSError, ValueError, RuntimeError, yaml.YAMLError) as e:
+        # ThemeError and bad JSON are ValueErrors; missing folders are OSErrors.
         print(f"[!] {e}", file=sys.stderr)
         sys.exit(1)
 

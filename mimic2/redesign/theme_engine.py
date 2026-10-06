@@ -21,23 +21,28 @@ import shutil
 from datetime import datetime, timezone
 
 from mimic2 import themes
-from mimic2.clone.web_cloner import MANIFEST
+from mimic2.clone.web_cloner import MANIFEST, ORIGINALS, THEME_CSS
 from mimic2.redesign.layout_rebuilder import layout_css
 from mimic2.utils import color_utils as cu
 from mimic2.utils import html_utils as hu
 
-ORIGINALS = ".mimic2-original"
-THEME_CSS = "mimic2-theme.css"
 SKIP_DIRS = {ORIGINALS, ".git"}
 
 # Old HTML colour attributes: <body bgcolor="#fff" text="#000" link="#00f">.
+# Only looked for inside start tags, never in page text or scripts.
+_START_TAG = re.compile(r"<[a-z][^<>]*>", re.I)
 _COLOR_ATTR = re.compile(
-    r"""(\b(?:bgcolor|color|text|link|vlink|alink)\s*=\s*)(['"]?)(#[0-9a-f]{3,8}|[a-z]+)\2""",
+    r"""(\s(?:bgcolor|color|text|link|vlink|alink)\s*=\s*)(['"]?)(#[0-9a-f]{3,8}|[a-z]+)\2""",
     re.I,
 )
 _FONT_FAMILY = re.compile(r"(font-family\s*:\s*)([^;}{]+)", re.I)
 _RADIUS = re.compile(r"(border-radius\s*:\s*)([0-9.]+)(px|rem|em)(?=\s*[;}!])", re.I)
 _HEAD_CLOSE = re.compile(r"</head\s*>", re.I)
+# Where to put the theme <link> on a page with no </head>: after the doctype,
+# <html> or <head> tag, whichever comes last near the top of the page.
+_PAGE_START = re.compile(r"\A\s*(?:<!doctype[^>]*>\s*)?(?:<html\b[^>]*>\s*)?(?:<head\b[^>]*>)?", re.I)
+# Comments and scripts, so a "</head>" written inside them isn't mistaken for the real one.
+_HIDDEN = re.compile(r"<!--.*?-->|<script\b.*?</script\s*>", re.I | re.S)
 _MONO_HINT = re.compile(r"mono|courier|consolas|menlo|code", re.I)
 # Icon fonts draw symbols (stars, arrows); swapping them shows empty boxes.
 _ICON_FONT = re.compile(r"icon|awesome|glyph|material|symbol|fa-|feather|ionic|dashicons", re.I)
@@ -152,9 +157,10 @@ class ThemeEngine:
             for colour, n in cu.find_colors(css).items():
                 counts[colour] = counts.get(colour, 0) + n
             if not rel.lower().endswith(".css"):
-                for m in _COLOR_ATTR.finditer(text):
-                    if cu.parse_color(m.group(3)):
-                        counts[m.group(3)] = counts.get(m.group(3), 0) + 1
+                for tag in _START_TAG.finditer(text):
+                    for m in _COLOR_ATTR.finditer(tag.group(0)):
+                        if cu.parse_color(m.group(3)):
+                            counts[m.group(3)] = counts.get(m.group(3), 0) + 1
         t = self.theme
         return cu.build_color_map(counts, t["palette"], t["background"], t["text"])
 
@@ -197,12 +203,14 @@ class ThemeEngine:
             return f"{m.group(1)}{m.group(2)}{new}{m.group(2)}" if new else m.group(0)
 
         html = hu.rewrite_inline_css(html, self._restyle_css)
-        html = _COLOR_ATTR.sub(colour_attr, html)
+        html = _START_TAG.sub(lambda tag: _COLOR_ATTR.sub(colour_attr, tag.group(0)), html)
         link = (f'<link rel="stylesheet" href="{hu.relative_link(rel, THEME_CSS)}" '
                 f'data-mimic2-theme>\n')
-        if _HEAD_CLOSE.search(html):
-            return _HEAD_CLOSE.sub(lambda m: link + m.group(0), html, count=1)
-        return link + html
+        at = _head_close(html)
+        if at is None:
+            # No </head>: go after the doctype so the page stays in standards mode.
+            at = _PAGE_START.match(html).end()
+        return html[:at] + link + html[at:]
 
     def _theme_css(self):
         t = self.theme
@@ -246,3 +254,12 @@ button, input[type="submit"], input[type="button"] {{
   border-color: var(--mimic2-accent);
 }}
 """ + layout_css(t)
+
+
+def _head_close(html):
+    """Index of the real </head>, ignoring any inside comments or scripts."""
+    hidden = [m.span() for m in _HIDDEN.finditer(html)]
+    for m in _HEAD_CLOSE.finditer(html):
+        if not any(a <= m.start() < b for a, b in hidden):
+            return m.start()
+    return None
