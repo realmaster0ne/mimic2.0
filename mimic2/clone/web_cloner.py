@@ -64,6 +64,7 @@ class WebAppCloner:
         self._css_pending = []  # stylesheets to rewrite once all assets are known
         self._robots = None
         self._paths = {}   # lower-cased local path -> URL that owns it
+        self._unsaved = 0  # files we couldn't write
 
     # -- public -----------------------------------------------------------
 
@@ -75,10 +76,11 @@ class WebAppCloner:
         if not self.pages:
             raise RuntimeError(f"Could not clone {self.url}: " +
                                (self.failed[0][1] if self.failed else "no pages"))
-        self._clear_old_redesign()
         if self.include_assets:
             self._download_assets()
         self._write_pages()
+        if not self._unsaved:
+            self._clear_old_redesign()
         manifest = self._write_manifest()
         self.log(f"[+] {len(self.pages)} page(s), {len(self.assets)} asset(s)"
                  + (f", {len(self.failed)} failed" if self.failed else ""))
@@ -234,7 +236,12 @@ class WebAppCloner:
     # -- writing ----------------------------------------------------------
 
     def _clear_old_redesign(self):
-        """Drop a previous redesign's backups so they can't replace this fresh clone."""
+        """Drop a previous redesign's leftovers once every file saved.
+
+        Each file's own backup is dropped as soon as it is rewritten (see
+        _write), so a clone that fails part-way never loses the backup of a
+        file it didn't replace.
+        """
         shutil.rmtree(os.path.join(self.output_dir, ORIGINALS), ignore_errors=True)
         theme_css = os.path.join(self.output_dir, THEME_CSS)
         if os.path.isfile(theme_css):
@@ -256,9 +263,17 @@ class WebAppCloner:
         return mapper
 
     def _write_pages(self):
-        for url, (path, html, final) in list(self.pages.items()):
-            out = hu.declare_utf8(hu.rewrite_html(html, final, self._mapper(path)))
-            if not self._write(path, out.encode("utf-8"), url):
+        while self.pages:
+            unsaved = []
+            for url, (path, html, final) in self.pages.items():
+                out = hu.declare_utf8(hu.rewrite_html(html, final, self._mapper(path)))
+                if not self._write(path, out.encode("utf-8"), url):
+                    unsaved.append(url)
+            if not unsaved:
+                return
+            # Pages saved so far may link to the ones that failed; write them
+            # again so those links point at the live site instead.
+            for url in unsaved:
                 del self.pages[url]
 
     def _write(self, rel_path, data, url):
@@ -269,8 +284,13 @@ class WebAppCloner:
             with open(full, "wb") as f:
                 f.write(data)
         except OSError as e:
+            self._unsaved += 1
             self._fail(url, f"could not save {rel_path}: {e.strerror or e}")
             return False
+        # This file is fresh now, so an old redesign backup of it is stale.
+        backup = os.path.join(self.output_dir, ORIGINALS, *rel_path.split("/"))
+        if os.path.isfile(backup):
+            os.remove(backup)
         return True
 
     def _write_manifest(self):

@@ -126,3 +126,62 @@ def test_css_charset_is_used_and_updated(monkeypatch, tmp_path):
     cloner("http://example.com/", out, include_assets=True, respect_robots=False).run()
     saved = (out / "s.css").read_bytes().decode("utf-8")
     assert saved.startswith('@charset "utf-8";') and "café" in saved
+
+
+# -- saving failures and theme files --------------------------------------
+
+def fake_site(monkeypatch, pages):
+    files = {url: (html.encode(), "text/html") for url, html in pages.items()}
+    monkeypatch.setattr(hu, "fetch", lambda url: (*files[url], url))
+
+
+def failing_write(monkeypatch, bad_path):
+    """Make saving bad_path fail the way a full or locked disk would."""
+    import builtins
+    import os
+
+    def fake_open(file, *args, **kwargs):
+        if str(file).replace(os.sep, "/").endswith("/" + bad_path):
+            raise OSError(28, "No space left on device")
+        return builtins.open(file, *args, **kwargs)
+
+    monkeypatch.setattr("mimic2.clone.web_cloner.open", fake_open, raising=False)
+
+
+def test_failed_reclone_keeps_the_redesign_backups(monkeypatch, tmp_path):
+    from mimic2.clone.web_cloner import ORIGINALS
+    from mimic2.redesign.theme_engine import ThemeEngine
+    fake_site(monkeypatch, {"http://example.com/": "<html><body>v1</body></html>"})
+    out = tmp_path / "out"
+    cloner("http://example.com/", out, respect_robots=False).run()
+    ThemeEngine(str(out), theme="dark", log=lambda *a: None).apply()
+
+    failing_write(monkeypatch, "index.html")
+    with pytest.raises(RuntimeError):
+        cloner("http://example.com/", out, respect_robots=False).run()
+    assert "v1" in (out / ORIGINALS / "index.html").read_text()
+
+
+def test_links_to_a_page_that_failed_to_save_stay_absolute(monkeypatch, tmp_path):
+    fake_site(monkeypatch, {
+        "http://example.com/": '<html><body><a href="/z/">Z</a></body></html>',
+        "http://example.com/z/": "<html><body>Z page</body></html>",
+    })
+    failing_write(monkeypatch, "z/index.html")
+    out = tmp_path / "out"
+    m = cloner("http://example.com/", out, respect_robots=False).run()
+    assert list(m["pages"]) == ["http://example.com/"]
+    assert 'href="http://example.com/z/"' in (out / "index.html").read_text()
+
+
+@pytest.mark.parametrize("layout", ["wide", 5, ["nav"]])
+def test_theme_layout_must_be_settings(tmp_path, layout):
+    import yaml
+    from mimic2 import themes
+    theme = themes.load("dark")
+    theme.pop("name")
+    theme["layout"] = layout
+    path = tmp_path / "bad.yaml"
+    path.write_text(yaml.safe_dump(theme))
+    with pytest.raises(themes.ThemeError, match="layout"):
+        themes.load(str(path))
