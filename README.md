@@ -115,6 +115,44 @@ Two auth schemes get in the way, for different reasons:
 
 If `mimic hosts` shows the app's API host, you're good.
 
+## mimic2: clone and redesign a website
+
+This repo also ships `mimic2`, a separate tool that copies a website into a
+local folder that works offline, then restyles the copy so it looks like a
+different site.
+
+```bash
+pip install -e .
+
+# Clone a site (pages plus CSS, JS, images and fonts) and redesign it in one go
+mimic2 clone https://books.toscrape.com --output my-app --depth 1 --theme dark
+
+# Redesign an existing clone; every run starts again from the cloned files
+mimic2 redesign my-app --theme light
+mimic2 redesign my-app --theme custom --palette "#FF5733,#33FF57"
+
+# List the built-in themes
+mimic2 themes
+```
+
+`python -m mimic2 ...` works too. Useful `clone` options: `--depth` (how many
+links deep to follow, default 3), `--max-pages` (default 50) and `--no-assets`
+(pages only).
+
+**Themes:** `modern-dark` (`dark`) and `minimal-light` (`light`) are built in.
+You can also pass the path to your own `.yaml` theme file.
+
+**What redesign changes:** colours (mapped onto the theme's palette), fonts,
+corner rounding and page layout (content width, spacing, heading size and
+weight, header, card, button and navigation styles). The untouched files are kept in `.mimic2-original/` inside the
+clone.
+
+**Limits:** it only clones `http://` and `https://` sites, stays on the
+starting site's host, and follows robots.txt. Each file is capped at 20 MB and
+60 seconds, and a clone stops at 500 assets. Pages built by JavaScript after
+they load are saved as the server sent them, so they may look empty offline.
+Only clone sites you are allowed to copy.
+
 ## Ethics
 
 Use it on your own accounts and data. It replays your session; it is not a tool
