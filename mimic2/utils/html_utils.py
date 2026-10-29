@@ -54,7 +54,9 @@ def fetch(url, timeout=15, max_bytes=MAX_BYTES, max_seconds=MAX_SECONDS):
             raise ValueError(f"too large ({int(length)} bytes)")
         chunks, size = [], 0
         while True:
-            chunk = resp.read(_CHUNK)
+            # read1 returns whatever has arrived, so a server trickling one
+            # byte at a time can't keep us waiting for a full chunk.
+            chunk = resp.read1(_CHUNK)
             if not chunk:
                 break
             size += len(chunk)

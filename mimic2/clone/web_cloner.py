@@ -26,6 +26,8 @@ MANIFEST = "mimic2.json"
 # Left behind by `mimic2 redesign`; cleared when a folder is cloned again.
 ORIGINALS = ".mimic2-original"
 THEME_CSS = "mimic2-theme.css"
+# Longest robots.txt Crawl-delay we'll wait between requests, in seconds.
+MAX_CRAWL_DELAY = 10
 
 
 def normalize_url(url):
@@ -102,7 +104,10 @@ class WebAppCloner:
         if self._robots is not None:
             wait = self._robots.crawl_delay(hu.ROBOTS_AGENT)
             if wait:
-                self.delay = max(self.delay, float(wait))
+                if float(wait) > MAX_CRAWL_DELAY:
+                    self.log(f"[!] robots.txt asks for {wait}s between requests; "
+                             f"using {MAX_CRAWL_DELAY}s")
+                self.delay = max(self.delay, min(float(wait), MAX_CRAWL_DELAY))
 
     def _allowed(self, url):
         """robots.txt only speaks for its own host; other hosts are allowed."""
