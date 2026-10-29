@@ -57,3 +57,23 @@ def test_huge_robots_crawl_delay_is_capped(monkeypatch, tmp_path):
     c = cloner("http://example.com/", tmp_path / "out")
     c._load_robots()
     assert 0 < c.delay <= 10
+
+
+# -- names and URLs -------------------------------------------------------
+
+@pytest.mark.parametrize("url, expected", [
+    ("http://x.com/con.tar.gz", "con_.tar.gz"),
+    ("http://x.com/CON.txt", "CON_.txt"),
+    ("http://x.com/files/nul", "files/nul_"),
+    ("http://x.com/console.css", "console.css"),
+])
+def test_windows_reserved_names_are_renamed_before_the_first_dot(url, expected):
+    assert hu.local_path(url, page=False) == expected
+
+
+def test_url_without_scheme_can_contain_another_url():
+    from mimic2.clone.web_cloner import normalize_url
+    assert (normalize_url("example.com/login?next=https://example.com/")
+            == "https://example.com/login?next=https://example.com/")
+    with pytest.raises(ValueError):
+        normalize_url("ftp://example.com/?x=https://y")

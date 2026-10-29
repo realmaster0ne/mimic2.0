@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import posixpath
+import re
 import shutil
 import time
 from collections import deque
@@ -26,6 +27,7 @@ MANIFEST = "mimic2.json"
 # Left behind by `mimic2 redesign`; cleared when a folder is cloned again.
 ORIGINALS = ".mimic2-original"
 THEME_CSS = "mimic2-theme.css"
+_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*://", re.I)
 # Longest robots.txt Crawl-delay we'll wait between requests, in seconds.
 MAX_CRAWL_DELAY = 10
 
@@ -33,7 +35,7 @@ MAX_CRAWL_DELAY = 10
 def normalize_url(url):
     """Add https:// if there's no scheme; only http(s) sites can be cloned."""
     url = url.strip()
-    if "://" not in url:
+    if not _SCHEME.match(url):
         url = "https://" + url
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
