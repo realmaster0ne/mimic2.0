@@ -84,6 +84,15 @@ def mime_type(ctype):
     return ctype.split(";")[0].strip()
 
 
+def is_html(ctype, body):
+    """True for an HTML response; with no Content-Type, look at the body."""
+    mime = mime_type(ctype)
+    if mime:
+        return "html" in mime
+    start = body.lstrip(_UTF8_BOM + b" \t\r\n")[:256].lower()
+    return start.startswith((b"<!doctype html", b"<html")) or b"<head" in start
+
+
 def charset_of(ctype):
     """'text/html; charset=utf-8' -> 'utf-8', or None."""
     m = re.search(r"charset=['\"]?([\w-]+)", ctype or "", re.I)
@@ -129,7 +138,7 @@ def declare_utf8(html):
         attr = _CHARSET_ATTR.search(bare)
         if attr:
             at = attr.start()
-        elif _CONTENT_TYPE.search(tag):
+        elif _CONTENT_TYPE.search(tag) and _CHARSET_VALUE.search(tag):
             at = 0
         else:
             return tag

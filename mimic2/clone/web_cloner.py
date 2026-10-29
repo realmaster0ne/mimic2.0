@@ -155,7 +155,7 @@ class WebAppCloner:
                 if not self._allowed(final):
                     self._fail(url, f"redirected to {final}, blocked by robots.txt")
                     continue
-            if "html" not in hu.mime_type(ctype):
+            if not hu.is_html(ctype, body):
                 # A link that turned out to be a file (PDF, image...).
                 if self.include_assets and len(self.assets) < self.max_assets:
                     self._save_asset(url, body)
