@@ -225,18 +225,21 @@ class _RefCollector(HTMLParser):
                     self.assets.append(url)
 
 
-def find_links(html, base_url):
-    """Absolute URLs of <a href> links in the page, in order, no duplicates."""
+def find_refs(html, base_url):
+    """(page links, asset URLs) from a single parse of the page."""
     c = _RefCollector(base_url)
     c.feed(html)
-    return c.links
+    return c.links, c.assets
+
+
+def find_links(html, base_url):
+    """Absolute URLs of <a href> links in the page, in order, no duplicates."""
+    return find_refs(html, base_url)[0]
 
 
 def find_assets(html, base_url):
     """Absolute URLs of stylesheets, scripts, images, icons and media."""
-    c = _RefCollector(base_url)
-    c.feed(html)
-    return c.assets
+    return find_refs(html, base_url)[1]
 
 
 def css_urls(css, base_url):
