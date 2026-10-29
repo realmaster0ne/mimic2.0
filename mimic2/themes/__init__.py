@@ -79,6 +79,8 @@ def validate(theme, source="theme"):
             raise ThemeError(f"{source}: fonts.{key} is missing")
     layout = theme.get("layout")
     if layout is not None:
+        if not isinstance(layout, dict):
+            raise ThemeError(f"{source}: layout must be a list of key: value settings")
         for key, allowed in LAYOUT_CHOICES.items():
             if key in layout and layout[key] not in allowed:
                 raise ThemeError(f"{source}: layout.{key} must be one of "
