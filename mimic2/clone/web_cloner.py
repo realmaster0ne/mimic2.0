@@ -222,13 +222,14 @@ class WebAppCloner:
                 continue
             if hu.mime_type(ctype) == "text/css" or path.endswith(".css"):
                 # Stylesheets pull in fonts, images and other CSS.
-                css = hu.decode(body, charset=hu.charset_of(ctype))
+                css = hu.decode_css(body, charset=hu.charset_of(ctype))
                 queue.extend(hu.css_urls(css, final))
                 self._css_pending.append((url, path, css, final))
         self.log(f"[+] downloaded {len(self.assets)} asset(s)")
         for url, path, css, final in self._css_pending:
             mapper = self._mapper(path)
-            self._write(path, hu.rewrite_css(css, final, mapper).encode("utf-8"), url)
+            out = hu.declare_css_utf8(hu.rewrite_css(css, final, mapper))
+            self._write(path, out.encode("utf-8"), url)
 
     # -- writing ----------------------------------------------------------
 

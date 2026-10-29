@@ -99,12 +99,62 @@ def decode(body, default="utf-8", charset=None):
         return body.decode(default, errors="replace")
 
 
-_META_CHARSET = re.compile(r"""(<meta\b[^>]*?\bcharset\s*=\s*['"]?)([\w-]+)""", re.I)
+_META_TAG = re.compile(r"<meta\b[^>]*>", re.I)
+_QUOTED = re.compile(r""""[^"]*"|'[^']*'""")
+_CHARSET_ATTR = re.compile(r"\scharset\s*=", re.I)
+_CONTENT_TYPE = re.compile(r"""\shttp-equiv\s*=\s*['"]?content-type\b""", re.I)
+_CHARSET_VALUE = re.compile(r"""(charset\s*=\s*['"]?)([\w-]+)""", re.I)
+_CSS_CHARSET = re.compile(r"""\A@charset\s+(['"])([\w-]+)\1\s*;""", re.I)
 
 
 def declare_utf8(html):
-    """Point every <meta> charset declaration at utf-8 (we save pages as UTF-8)."""
-    return _META_CHARSET.sub(lambda m: m.group(1) + "utf-8", html)
+    """Make the page say it's UTF-8, since that's how we save it.
+
+    Rewrites <meta charset> and <meta http-equiv="Content-Type"> tags only,
+    and adds <meta charset="utf-8"> if there was neither: the page's charset
+    came from the HTTP header, which a saved file doesn't have.
+    """
+    declared = False
+
+    def fix(m):
+        nonlocal declared
+        tag = m.group(0)
+        # Blank out quoted values so content="... charset=..." text in other
+        # meta tags isn't mistaken for a charset attribute.
+        bare = _QUOTED.sub(lambda q: " " * len(q.group(0)), tag)
+        attr = _CHARSET_ATTR.search(bare)
+        if attr:
+            at = attr.start()
+        elif _CONTENT_TYPE.search(tag):
+            at = 0
+        else:
+            return tag
+        declared = True
+        return tag[:at] + _CHARSET_VALUE.sub(lambda v: v.group(1) + "utf-8", tag[at:], count=1)
+
+    html = _META_TAG.sub(fix, html)
+    if declared:
+        return html
+    at = page_start(html)
+    return html[:at] + '<meta charset="utf-8">' + html[at:]
+
+
+def decode_css(body, charset=None):
+    """Decode stylesheet bytes: a UTF-8 byte-order mark, else the HTTP
+    charset, else a leading @charset rule, else UTF-8."""
+    if body.startswith(_UTF8_BOM):
+        return body[len(_UTF8_BOM):].decode("utf-8", errors="replace")
+    m = _CSS_CHARSET.match(body[:128].decode("ascii", errors="replace"))
+    encoding = charset or (m.group(2) if m else "utf-8")
+    try:
+        return body.decode(encoding, errors="replace")
+    except LookupError:
+        return body.decode("utf-8", errors="replace")
+
+
+def declare_css_utf8(css):
+    """Point a leading @charset rule at utf-8 (we save stylesheets as UTF-8)."""
+    return _CSS_CHARSET.sub(lambda m: f"@charset {m.group(1)}utf-8{m.group(1)};", css, count=1)
 
 
 def page_start(html):

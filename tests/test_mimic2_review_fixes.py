@@ -77,3 +77,52 @@ def test_url_without_scheme_can_contain_another_url():
             == "https://example.com/login?next=https://example.com/")
     with pytest.raises(ValueError):
         normalize_url("ftp://example.com/?x=https://y")
+
+
+# -- charsets and the top of the page ------------------------------------
+
+@pytest.mark.parametrize("start", ["﻿", "<!-- built 2026 -->\n", "﻿ <!-- x -->"])
+def test_theme_link_stays_after_doctype_behind_bom_or_comment(tmp_path, start):
+    from mimic2.redesign.theme_engine import ThemeEngine
+    (tmp_path / "index.html").write_text(
+        start + "<!DOCTYPE html><html><body>Hi</body></html>", encoding="utf-8")
+    ThemeEngine(str(tmp_path), theme="dark", log=lambda *a: None).apply()
+    page = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert page.index("<!DOCTYPE") < page.index("data-mimic2-theme")
+
+
+def test_decode_drops_a_utf8_bom():
+    assert hu.decode(b"\xef\xbb\xbf<p>caf\xc3\xa9</p>") == "<p>café</p>"
+
+
+def test_page_without_meta_charset_gets_one():
+    out = hu.declare_utf8("<!DOCTYPE html><html><head><title>x</title></head></html>")
+    assert out.startswith('<!DOCTYPE html><html><head><meta charset="utf-8"><title>')
+
+
+def test_declare_utf8_rewrites_only_real_charset_declarations():
+    desc = '<meta name="description" content="charset=koi8-r explained">'
+    out = hu.declare_utf8(f"<html><head>{desc}</head></html>")
+    assert desc in out and '<meta charset="utf-8">' in out
+
+    http_equiv = ('<html><head><meta http-equiv="Content-Type" '
+                  'content="text/html; charset=iso-8859-1"></head></html>')
+    out = hu.declare_utf8(http_equiv)
+    assert "charset=utf-8" in out and "iso-8859-1" not in out
+    assert '<meta charset="utf-8">' not in out
+
+    assert hu.declare_utf8('<meta charset="iso-8859-1">') == '<meta charset="utf-8">'
+
+
+def test_css_charset_is_used_and_updated(monkeypatch, tmp_path):
+    css = '@charset "iso-8859-1";\nbody::after { content: "caf\xe9"; }'.encode("iso-8859-1")
+    files = {
+        "http://example.com/": (b'<html><head><link rel="stylesheet" href="/s.css">'
+                                b"</head></html>", "text/html"),
+        "http://example.com/s.css": (css, "text/css"),
+    }
+    monkeypatch.setattr(hu, "fetch", lambda url: (*files[url], url))
+    out = tmp_path / "out"
+    cloner("http://example.com/", out, include_assets=True, respect_robots=False).run()
+    saved = (out / "s.css").read_bytes().decode("utf-8")
+    assert saved.startswith('@charset "utf-8";') and "café" in saved
