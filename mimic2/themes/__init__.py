@@ -103,6 +103,8 @@ def load(name):
     if not isinstance(theme, dict):
         raise ThemeError(f"{source}: a theme file must be a list of key: value settings")
     theme.setdefault("name", os.path.basename(path)[:-5].replace("_", "-"))
+    if not isinstance(theme["name"], str):
+        raise ThemeError(f"{source}: name must be text, not {theme['name']!r}")
     theme.setdefault("radius", None)
     if "fonts" in theme and not isinstance(theme["fonts"], dict):
         raise ThemeError(f"{source}: fonts must be a list of key: value settings")
