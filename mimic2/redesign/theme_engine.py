@@ -38,9 +38,6 @@ _COLOR_ATTR = re.compile(
 _FONT_FAMILY = re.compile(r"(font-family\s*:\s*)([^;}{]+)", re.I)
 _RADIUS = re.compile(r"(border-radius\s*:\s*)([0-9.]+)(px|rem|em)(?=\s*[;}!])", re.I)
 _HEAD_CLOSE = re.compile(r"</head\s*>", re.I)
-# Where to put the theme <link> on a page with no </head>: after the doctype,
-# <html> or <head> tag, whichever comes last near the top of the page.
-_PAGE_START = re.compile(r"\A\s*(?:<!doctype[^>]*>\s*)?(?:<html\b[^>]*>\s*)?(?:<head\b[^>]*>)?", re.I)
 # Comments and scripts, so a "</head>" written inside them isn't mistaken for the real one.
 _HIDDEN = re.compile(r"<!--.*?-->|<script\b.*?</script\s*>", re.I | re.S)
 _MONO_HINT = re.compile(r"mono|courier|consolas|menlo|code", re.I)
@@ -209,7 +206,7 @@ class ThemeEngine:
         at = _head_close(html)
         if at is None:
             # No </head>: go after the doctype so the page stays in standards mode.
-            at = _PAGE_START.match(html).end()
+            at = hu.page_start(html)
         return html[:at] + link + html[at:]
 
     def _theme_css(self):

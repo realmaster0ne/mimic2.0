@@ -37,6 +37,12 @@ _ATTR = re.compile(r"""(\b(?:href|src)\s*=\s*)(?:(['"])(.*?)\2|([^\s>'"`=]+))"""
 # <style>...</style> blocks and style="..." attributes, for CSS url()s.
 _STYLE_BLOCK = re.compile(r"(<style\b[^>]*>)(.*?)(</style>)", re.I | re.S)
 _STYLE_ATTR = re.compile(r"""(\bstyle\s*=\s*)(['"])(.*?)\2""", re.I | re.S)
+# The top of a page: an optional byte-order mark, comments, the doctype and
+# the <html> and <head> tags. Anything that must come first goes after these.
+_PAGE_START = re.compile(
+    r"\A﻿?(?:\s|<!--.*?-->)*(?:<!doctype[^>]*>(?:\s|<!--.*?-->)*)?"
+    r"(?:<html\b[^>]*>\s*)?(?:<head\b[^>]*>)?", re.I | re.S)
+_UTF8_BOM = b"\xef\xbb\xbf"
 
 
 def fetch(url, timeout=15, max_bytes=MAX_BYTES, max_seconds=MAX_SECONDS):
@@ -81,7 +87,10 @@ def charset_of(ctype):
 
 
 def decode(body, default="utf-8", charset=None):
-    """Decode page bytes: the HTTP charset if given, else <meta charset>."""
+    """Decode page bytes: a UTF-8 byte-order mark wins, then the HTTP charset
+    if given, then <meta charset>."""
+    if body.startswith(_UTF8_BOM):
+        return body[len(_UTF8_BOM):].decode("utf-8", errors="replace")
     m = re.search(rb"""<meta[^>]+charset=['"]?([\w-]+)""", body[:2048], re.I)
     encoding = charset or (m.group(1).decode("ascii") if m else default)
     try:
@@ -96,6 +105,11 @@ _META_CHARSET = re.compile(r"""(<meta\b[^>]*?\bcharset\s*=\s*['"]?)([\w-]+)""", 
 def declare_utf8(html):
     """Point every <meta> charset declaration at utf-8 (we save pages as UTF-8)."""
     return _META_CHARSET.sub(lambda m: m.group(1) + "utf-8", html)
+
+
+def page_start(html):
+    """Index just past the doctype, <html> and <head> tags at the top of a page."""
+    return _PAGE_START.match(html).end()
 
 
 def _absolute(ref, base_url):
