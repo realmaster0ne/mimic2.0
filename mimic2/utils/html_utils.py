@@ -9,6 +9,7 @@ import hashlib
 import posixpath
 import re
 import time
+from html import escape, unescape
 from html.parser import HTMLParser
 from urllib.parse import unquote, urldefrag, urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -43,6 +44,9 @@ _PAGE_START = re.compile(
     r"\A﻿?(?:\s|<!--.*?-->)*(?:<!doctype[^>]*>(?:\s|<!--.*?-->)*)?"
     r"(?:<html\b[^>]*>\s*)?(?:<head\b[^>]*>)?", re.I | re.S)
 _UTF8_BOM = b"\xef\xbb\xbf"
+_SRCSET_ATTR = re.compile(r"""(\bsrcset\s*=\s*)(['"])(.*?)\2""", re.I | re.S)
+_BASE_TAG = re.compile(r"<base\b[^>]*>", re.I)
+_SCRIPT_BODY = re.compile(r"(<script\b[^>]*>)(.*?)(</script\s*>)", re.I | re.S)
 
 
 def fetch(url, timeout=15, max_bytes=MAX_BYTES, max_seconds=MAX_SECONDS):
@@ -306,21 +310,76 @@ def _rewrite_css_text(css, base_url, mapper):
     return _CSS_IMPORT.sub(import_sub, _CSS_URL.sub(css_sub, css))
 
 
+def _map_ref(ref, base_url, mapper):
+    """New attribute text for one link, or None to leave it alone.
+
+    Attribute values hold HTML entities (&amp;), so they are decoded before
+    the lookup and the result is escaped again. A #fragment is kept.
+    """
+    ref = unescape(ref or "")
+    new = mapper(_absolute(ref, base_url))
+    if not new:
+        return None
+    fragment = urldefrag(ref.strip())[1]
+    return escape(new + (f"#{fragment}" if fragment else ""))
+
+
+def _apply_base(html, base_url):
+    """Resolve links against the page's <base href>, then drop that href:
+    rewritten links are relative to the saved file, not to the base."""
+    tag = _BASE_TAG.search(html)
+    href = _ATTR.search(tag.group(0)) if tag else None
+    if not href:
+        return base_url, html
+    value = href.group(3) if href.group(2) else href.group(4)
+    base_url = urljoin(base_url, unescape(value))
+    t = tag.group(0)
+    new_tag = t[:href.start()].rstrip() + t[href.end():]
+    return base_url, html[:tag.start()] + new_tag + html[tag.end():]
+
+
+def _outside_script_bodies(html, transform):
+    """Apply transform to the page except the code inside <script> blocks,
+    where text like el.src="/x" is JavaScript, not an attribute."""
+    out, last = [], 0
+    for m in _SCRIPT_BODY.finditer(html):
+        out.append(transform(html[last:m.end(1)]))
+        out.append(html[m.end(1):m.end()])
+        last = m.end()
+    out.append(transform(html[last:]))
+    return "".join(out)
+
+
 def rewrite_html(html, base_url, mapper):
-    """Rewrite href/src attributes and CSS url()s in a page.
+    """Rewrite href/src/srcset attributes and CSS url()s in a page.
 
     mapper(absolute_url) returns the replacement link, or None to leave that
     reference as it is (e.g. external links we didn't download).
     """
+    base_url, html = _apply_base(html, base_url)
 
     def attr_sub(m):
         quote = m.group(2) or '"'
         ref = m.group(3) if m.group(2) else m.group(4)
-        new = mapper(_absolute(ref, base_url))
+        new = _map_ref(ref, base_url, mapper)
         return f"{m.group(1)}{quote}{new}{quote}" if new else m.group(0)
 
-    html = _ATTR.sub(attr_sub, html)
-    return rewrite_inline_css(html, lambda css: _rewrite_css_text(css, base_url, mapper))
+    def srcset_sub(m):
+        parts, changed = [], False
+        for part in m.group(3).split(","):
+            bits = part.split(None, 1)
+            new = _map_ref(bits[0], base_url, mapper) if bits else None
+            changed = changed or bool(new)
+            parts.append(" ".join([new or bits[0], *bits[1:]]) if bits else part)
+        if not changed:
+            return m.group(0)
+        return f"{m.group(1)}{m.group(2)}{', '.join(parts)}{m.group(2)}"
+
+    def rewrite(text):
+        text = _SRCSET_ATTR.sub(srcset_sub, _ATTR.sub(attr_sub, text))
+        return rewrite_inline_css(text, lambda css: _rewrite_css_text(css, base_url, mapper))
+
+    return _outside_script_bodies(html, rewrite)
 
 
 def rewrite_inline_css(html, transform):
