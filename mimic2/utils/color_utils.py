@@ -13,6 +13,7 @@ original colour scheme while changing what it looks like:
   given the next colour from the new palette. Shades inside a group (hover,
   pressed, light tints) keep their relative lightness.
 """
+import bisect
 import colorsys
 import re
 
@@ -36,6 +37,9 @@ COLOR_RE = re.compile(
     r"|\b(?:rgba?|hsla?)\(\s*[^()]*\)",
     re.I,
 )
+# Comments and quoted strings, which never hold colours we should change.
+_CSS_HIDDEN = re.compile(r"""/\*.*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'""", re.S)
+_URL_OPEN = re.compile(r"url\(\s*\Z", re.I)
 
 NEUTRAL_SATURATION = 0.12  # below this a colour counts as grey
 HUE_GROUP_DEGREES = 30     # colours within this hue distance share a palette colour
@@ -153,10 +157,32 @@ def is_neutral(color):
     return to_hsl(color)[1] < NEUTRAL_SATURATION
 
 
+def _color_matches(css):
+    """COLOR_RE matches that are colour values: not #id selectors that happen
+    to be hex (#feed, #add), url(#fragment) references, or text inside
+    comments and strings."""
+    masked = _CSS_HIDDEN.sub(lambda m: " " * len(m.group(0)), css)
+    # Text that ends at a "{" is a selector or @-rule prelude, not a value.
+    preludes, start = [], 0
+    for i, ch in enumerate(masked):
+        if ch in "{};":
+            if ch == "{":
+                preludes.append((start, i))
+            start = i + 1
+    starts = [a for a, _ in preludes]
+    for m in COLOR_RE.finditer(masked):
+        k = bisect.bisect_right(starts, m.start()) - 1
+        if k >= 0 and m.start() < preludes[k][1]:
+            continue
+        if _URL_OPEN.search(masked, max(0, m.start() - 16), m.start()):
+            continue
+        yield m
+
+
 def find_colors(css):
     """Colour literals in CSS text, most frequent first, as {css_text: count}."""
     counts = {}
-    for m in COLOR_RE.finditer(css):
+    for m in _color_matches(css):
         if parse_color(m.group(0)):
             counts[m.group(0)] = counts.get(m.group(0), 0) + 1
     return dict(sorted(counts.items(), key=lambda kv: -kv[1]))
@@ -237,4 +263,10 @@ def build_color_map(colors, palette, background, text):
 
 def recolor(css, mapping):
     """Replace every colour literal found in mapping; others are left as is."""
-    return COLOR_RE.sub(lambda m: mapping.get(m.group(0), m.group(0)), css)
+    out, last = [], 0
+    for m in _color_matches(css):
+        out.append(css[last:m.start()])
+        out.append(mapping.get(m.group(0), m.group(0)))
+        last = m.end()
+    out.append(css[last:])
+    return "".join(out)
