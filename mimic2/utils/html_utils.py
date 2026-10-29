@@ -212,9 +212,11 @@ def local_path(url, page=None):
 def _safe_part(name):
     """Make one path part a legal, not-too-long Windows file name."""
     name = name.rstrip(". ") or "_"
-    stem, ext = posixpath.splitext(name)
-    if stem.split(".")[0].lower() in _RESERVED:
-        name = stem + "_" + ext
+    first, dot, rest = name.partition(".")
+    if first.lower() in _RESERVED:
+        # Windows only looks before the first dot: con.tar.gz is as bad as con.
+        name = first + "_" + dot + rest
+    ext = posixpath.splitext(name)[1]
     if len(name) > _MAX_NAME:
         digest = hashlib.sha1(name.encode()).hexdigest()[:8]
         ext = ext if len(ext) <= 10 else ""
